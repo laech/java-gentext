@@ -72,7 +72,7 @@ public final class TextGenerator {
     }
 
     /**
-     * Creates an instance from the given readable,
+     * Loads the source text from the given readable,
      * the readable can be closed by the caller at the end of this call.
      */
     public static TextGenerator create(Readable readable) {
@@ -80,6 +80,8 @@ public final class TextGenerator {
     }
 
     /**
+     * Generates some text randomly.
+     *
      * @param random randomness provider
      * @param max    maximum number of words to return in the result
      */
@@ -93,6 +95,8 @@ public final class TextGenerator {
     }
 
     /**
+     * Generates some text based on the given phrase.
+     *
      * @param random randomness provider
      * @param max    maximum number of words to return in the result
      * @param order  given order-k, generate the next word base of the previous k words

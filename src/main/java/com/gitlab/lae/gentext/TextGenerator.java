@@ -58,11 +58,11 @@ public final class TextGenerator {
         this.positions = positions.stream().mapToInt(i -> i).toArray();
         this.order = order;
         this.suffixes = new SuffixList(this.source, this.positions.clone());
-        this.suffixes.sort(this::compare);
+        this.suffixes.sort((a, b) -> compare(a, b, order));
     }
 
-    private int compare(CharBuffer a, CharBuffer b) {
-        int k = order;
+    private static int compare(CharBuffer a, CharBuffer b, int count) {
+        int k = count;
         int n = min(a.length(), b.length());
         for (int i = 0; i < n; i++) {
             char x = a.charAt(i);
@@ -71,7 +71,7 @@ public final class TextGenerator {
             if (result != 0) {
                 return result;
             }
-            if (x == sep && --k == 0) {
+            if (k > 0 && x == sep && --k == 0) {
                 return 0;
             }
         }
@@ -154,7 +154,7 @@ public final class TextGenerator {
     }
 
     private int pickNextPhraseIndex(CharBuffer phrase, IntSupplier random) {
-        int index = binarySearch(suffixes, phrase, TextGenerator::compareIgnoreCase);
+        int index = binarySearch(suffixes, phrase, (a, b) -> compare(a, b, -1));
         if (index < 0) {
             index = -(index + 1); // See binarySearch() Javadoc
         }
@@ -169,22 +169,9 @@ public final class TextGenerator {
         return result;
     }
 
-    private static int compareIgnoreCase(CharBuffer a, CharBuffer b) {
-        int n = min(a.length(), b.length());
-        for (int i = 0; i < n; i++) {
-            char x = a.charAt(i);
-            char y = b.charAt(i);
-            int result = Character.compare(toLowerCase(x), toLowerCase(y));
-            if (result != 0) {
-                return result;
-            }
-        }
-        return a.length() - b.length();
-    }
-
     private static boolean isPrefix(CharBuffer source, CharBuffer prefix) {
         return source.remaining() >= prefix.remaining() &&
-                compareIgnoreCase(source.subSequence(0, prefix.length()), prefix) == 0;
+                compare(source.subSequence(0, prefix.length()), prefix, -1) == 0;
     }
 
     private class SuffixList

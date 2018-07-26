@@ -7,6 +7,8 @@ import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static java.lang.Character.toLowerCase;
+import static java.lang.Math.min;
 import static java.util.Arrays.binarySearch;
 import static java.util.Collections.binarySearch;
 import static java.util.Objects.requireNonNull;
@@ -17,6 +19,7 @@ import static java.util.Objects.requireNonNull;
 public final class TextGenerator {
 
     private static final Pattern delimiter = Pattern.compile("\\s+");
+    private static final char sep = ' ';
 
     /**
      * Source input with white spaces removed.
@@ -32,51 +35,57 @@ public final class TextGenerator {
 
     /**
      * A word based suffix list view of {@link #source}.
-     * Sorted by the string representation of each suffix.
-     * <p>
-     * For example, give the string
-     * {@code "of the people, by the people"},
-     * we would have the following suffix list:
-     * <pre>
-     *     "of the people, by the people"
-     *        "the people, by the people"
-     *            "people, by the people"
-     *                    "by the people"
-     *                       "the people"
-     *                           "people"
-     * </pre>
-     * sorted to be:
-     * <pre>
-     *     "by the, people"
-     *     "for the people"
-     *     "of the people, by the people"
-     *     "people"
-     *     "people, by the people"
-     *     "the people"
-     *     "the people, by the people"
-     * </pre>
+     * Sorted by the first {@link #order} words.
      */
     private final List<CharBuffer> suffixes;
 
-    private TextGenerator(Readable readable) {
+    /**
+     * Given order-k, generate the next word base of the previous k words
+     */
+    private final int order;
+
+    private TextGenerator(Readable readable, int order) {
+        if (order <= 0) {
+            throw new IllegalArgumentException("order=" + order);
+        }
         List<Integer> positions = new ArrayList<>();
         StringBuilder builder = new StringBuilder();
         new Scanner(readable).useDelimiter(delimiter).forEachRemaining(word -> {
             positions.add(builder.length());
-            builder.append(word);
+            builder.append(word).append(sep);
         });
         this.source = builder.toString();
         this.positions = positions.stream().mapToInt(i -> i).toArray();
+        this.order = order;
         this.suffixes = new SuffixList(this.source, this.positions.clone());
-        this.suffixes.sort(null);
+        this.suffixes.sort(this::compare);
+    }
+
+    private int compare(CharBuffer a, CharBuffer b) {
+        int k = order;
+        int n = min(a.length(), b.length());
+        for (int i = 0; i < n; i++) {
+            char x = a.charAt(i);
+            char y = b.charAt(i);
+            int result = Character.compare(toLowerCase(x), toLowerCase(y));
+            if (result != 0) {
+                return result;
+            }
+            if (x == sep && --k == 0) {
+                return 0;
+            }
+        }
+        return a.length() - b.length();
     }
 
     /**
      * Loads the source text from the given readable,
      * the readable can be closed by the caller at the end of this call.
+     *
+     * @param order given order-k, generate the next word base of the previous k words
      */
-    public static TextGenerator create(Readable readable) {
-        return new TextGenerator(readable);
+    public static TextGenerator create(Readable readable, int order) {
+        return new TextGenerator(readable, order);
     }
 
     /**
@@ -91,7 +100,7 @@ public final class TextGenerator {
         if (!word.isPresent()) {
             throw new IllegalStateException();
         }
-        return generate(random, max, 2, word.get());
+        return generate(random, max, word.get());
     }
 
     /**
@@ -99,16 +108,15 @@ public final class TextGenerator {
      *
      * @param random randomness provider
      * @param max    maximum number of words to return in the result
-     * @param order  given order-k, generate the next word base of the previous k words
      * @param phrase the phrase to start the generation with
      */
-    public String generate(IntSupplier random, int max, int order, String phrase) {
-        CharBuffer buffer = CharBuffer.wrap(delimiter.matcher(phrase).replaceAll(""));
-        return generate(random, max, order, buffer);
+    public String generate(IntSupplier random, int max, String phrase) {
+        CharBuffer buffer = CharBuffer.wrap(delimiter.matcher(phrase).replaceAll(String.valueOf(sep)));
+        return generate(random, max, buffer);
     }
 
-    private String generate(IntSupplier random, int max, int order, CharBuffer phrase) {
-        StringBuilder builder = new StringBuilder();
+    private String generate(IntSupplier random, int max, CharBuffer phrase) {
+        StringBuilder builder = new StringBuilder(phrase);
         for (int n = 0; n < max; n++) {
 
             int i = pickNextPhraseIndex(phrase, random);
@@ -127,10 +135,7 @@ public final class TextGenerator {
                 break;
             }
 
-            if (builder.length() != 0) {
-                builder.append(' ');
-            }
-            builder.append(next);
+            builder.append(sep).append(next);
         }
         return builder.toString();
     }
@@ -143,13 +148,13 @@ public final class TextGenerator {
         return IntStream.range(index, positions.length)
                 .mapToObj(i -> {
                     int start = positions[i];
-                    int end = i == positions.length - 1 ? source.length() : positions[i + 1];
+                    int end = (i == positions.length - 1 ? source.length() : positions[i + 1]) - 1;
                     return CharBuffer.wrap(source, start, end);
                 });
     }
 
     private int pickNextPhraseIndex(CharBuffer phrase, IntSupplier random) {
-        int index = binarySearch(suffixes, phrase);
+        int index = binarySearch(suffixes, phrase, TextGenerator::compareIgnoreCase);
         if (index < 0) {
             index = -(index + 1); // See binarySearch() Javadoc
         }
@@ -164,9 +169,22 @@ public final class TextGenerator {
         return result;
     }
 
+    private static int compareIgnoreCase(CharBuffer a, CharBuffer b) {
+        int n = min(a.length(), b.length());
+        for (int i = 0; i < n; i++) {
+            char x = a.charAt(i);
+            char y = b.charAt(i);
+            int result = Character.compare(toLowerCase(x), toLowerCase(y));
+            if (result != 0) {
+                return result;
+            }
+        }
+        return a.length() - b.length();
+    }
+
     private static boolean isPrefix(CharBuffer source, CharBuffer prefix) {
         return source.remaining() >= prefix.remaining() &&
-                source.subSequence(0, prefix.length()).equals(prefix);
+                compareIgnoreCase(source.subSequence(0, prefix.length()), prefix) == 0;
     }
 
     private class SuffixList

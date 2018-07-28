@@ -168,7 +168,7 @@ public final class TextGenerator {
         return index + random.nextInt(duplicates[index]);
     }
 
-    private class SuffixList
+    private static class SuffixList
             extends AbstractList<CharBuffer>
             implements RandomAccess {
 

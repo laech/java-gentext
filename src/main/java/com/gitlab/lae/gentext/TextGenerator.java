@@ -87,7 +87,7 @@ public final class TextGenerator {
             if (result != 0) {
                 return result;
             }
-            if (k > 0 && x == sep && --k == 0) {
+            if (x == sep && --k == 0) {
                 return 0;
             }
         }

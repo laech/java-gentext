@@ -2,7 +2,6 @@ package com.gitlab.lae.gentext;
 
 import java.nio.CharBuffer;
 import java.util.*;
-import java.util.function.IntSupplier;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -44,6 +43,13 @@ public final class TextGenerator {
      */
     private final int order;
 
+    /**
+     * For each suffix in {@link #suffixes}, counts how many subsequent
+     * suffixes have the same {@link #order} words.
+     * 1 means the first {@link #order} words this suffixes is unique.
+     */
+    private final int[] duplicates;
+
     private TextGenerator(Readable readable, int order) {
         if (order <= 0) {
             throw new IllegalArgumentException("order=" + order);
@@ -58,11 +64,24 @@ public final class TextGenerator {
         this.positions = positions.stream().mapToInt(i -> i).toArray();
         this.order = order;
         this.suffixes = new SuffixList(this.source, this.positions.clone());
-        this.suffixes.sort((a, b) -> compare(a, b, order));
+        this.suffixes.sort(this::compare);
+        this.duplicates = new int[suffixes.size()];
+        computeDuplicates();
     }
 
-    private static int compare(CharBuffer a, CharBuffer b, int count) {
-        int k = count;
+    private void computeDuplicates() {
+        duplicates[suffixes.size() - 1] = 1;
+        for (int i = suffixes.size() - 2; i >= 0; i--) {
+            if (compare(suffixes.get(i), suffixes.get(i + 1)) == 0) {
+                duplicates[i] = duplicates[i + 1] + 1;
+            } else {
+                duplicates[i] = 1;
+            }
+        }
+    }
+
+    private int compare(CharBuffer a, CharBuffer b) {
+        int k = order;
         int n = min(a.length(), b.length());
         for (int i = 0; i < n; i++) {
             char x = a.charAt(i);
@@ -94,8 +113,8 @@ public final class TextGenerator {
      * @param random randomness provider
      * @param max    maximum number of words to return in the result
      */
-    public String generate(IntSupplier random, int max) {
-        int pos = positions[Math.abs(random.getAsInt()) % suffixes.size()];
+    public String generate(Random random, int max) {
+        int pos = positions[random.nextInt(suffixes.size())];
         Optional<CharBuffer> word = words(pos).findFirst();
         if (!word.isPresent()) {
             throw new IllegalStateException();
@@ -103,19 +122,7 @@ public final class TextGenerator {
         return generate(random, max, word.get());
     }
 
-    /**
-     * Generates some text based on the given phrase.
-     *
-     * @param random randomness provider
-     * @param max    maximum number of words to return in the result
-     * @param phrase the phrase to start the generation with
-     */
-    public String generate(IntSupplier random, int max, String phrase) {
-        CharBuffer buffer = CharBuffer.wrap(delimiter.matcher(phrase).replaceAll(String.valueOf(sep)));
-        return generate(random, max, buffer);
-    }
-
-    private String generate(IntSupplier random, int max, CharBuffer phrase) {
+    private String generate(Random random, int max, CharBuffer phrase) {
         StringBuilder builder = new StringBuilder(phrase);
         for (int n = 0; n < max; n++) {
 
@@ -153,25 +160,12 @@ public final class TextGenerator {
                 });
     }
 
-    private int pickNextPhraseIndex(CharBuffer phrase, IntSupplier random) {
-        int index = binarySearch(suffixes, phrase, (a, b) -> compare(a, b, -1));
+    private int pickNextPhraseIndex(CharBuffer phrase, Random random) {
+        int index = binarySearch(suffixes, phrase, this::compare);
         if (index < 0) {
             index = -(index + 1); // See binarySearch() Javadoc
         }
-        int result = index;
-        for (int i = 0;
-             index + i < suffixes.size() && isPrefix(suffixes.get(index + i), phrase);
-             i++) {
-            if (random.getAsInt() % (i + 1) == 0) {
-                result = index + i;
-            }
-        }
-        return result;
-    }
-
-    private static boolean isPrefix(CharBuffer source, CharBuffer prefix) {
-        return source.remaining() >= prefix.remaining() &&
-                compare(source.subSequence(0, prefix.length()), prefix, -1) == 0;
+        return index + random.nextInt(duplicates[index]);
     }
 
     private class SuffixList

@@ -13,16 +13,13 @@ import static java.util.Collections.binarySearch;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Text generator based on Programming Pearls - Column 15.
+ * Experimental toy text generator based on Programming Pearls - Column 15.
  */
 public final class TextGenerator {
 
     private static final Pattern delimiter = Pattern.compile("\\s+");
     private static final char sep = ' ';
 
-    /**
-     * Source input with white spaces removed.
-     */
     private final CharSequence source;
 
     /**
@@ -113,7 +110,7 @@ public final class TextGenerator {
      * @param random randomness provider
      * @param max    maximum number of words to return in the result
      */
-    public String generate(Random random, int max) {
+    public CharSequence generate(Random random, int max) {
         int pos = positions[random.nextInt(suffixes.size())];
         Optional<CharBuffer> word = words(pos).findFirst();
         if (!word.isPresent()) {
